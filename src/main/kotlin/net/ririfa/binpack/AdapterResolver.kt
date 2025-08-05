@@ -5,9 +5,33 @@ import net.ririfa.binpack.additional.ListAdapter
 import net.ririfa.binpack.additional.MapAdapter
 import net.ririfa.binpack.additional.NullableAdapter
 import net.ririfa.binpack.additional.PropertyAdapter
+import net.ririfa.binpack.primitive.BigDecimalAdapter
+import net.ririfa.binpack.primitive.BigIntegerAdapter
+import net.ririfa.binpack.primitive.BooleanAdapter
+import net.ririfa.binpack.primitive.ByteAdapter
+import net.ririfa.binpack.primitive.ByteArrayAdapter
+import net.ririfa.binpack.primitive.ByteBufferAdapter
+import net.ririfa.binpack.primitive.CharAdapter
+import net.ririfa.binpack.primitive.DateAdapter
+import net.ririfa.binpack.primitive.DoubleAdapter
+import net.ririfa.binpack.primitive.FloatAdapter
+import net.ririfa.binpack.primitive.IntAdapter
+import net.ririfa.binpack.primitive.LocalDateAdapter
+import net.ririfa.binpack.primitive.LocalDateTimeAdapter
+import net.ririfa.binpack.primitive.LocalTimeAdapter
+import net.ririfa.binpack.primitive.LongAdapter
+import net.ririfa.binpack.primitive.ShortAdapter
+import net.ririfa.binpack.primitive.StringAdapter
+import net.ririfa.binpack.primitive.UUIDAdapter
+import java.math.BigDecimal
+import java.math.BigInteger
 import java.nio.ByteBuffer
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.LocalTime
+import java.util.Date
+import java.util.UUID
 import kotlin.reflect.KClass
-import kotlin.reflect.KProperty1
 import kotlin.reflect.KType
 import kotlin.reflect.full.*
 import java.util.concurrent.ConcurrentHashMap
@@ -40,12 +64,16 @@ object AdapterResolver {
                 String::class  -> return@getOrPut StringAdapter
                 ByteArray::class -> return@getOrPut ByteArrayAdapter
 
-                java.util.UUID::class -> return@getOrPut UUIDAdapter
-                java.math.BigInteger::class -> return@getOrPut BigIntegerAdapter
-                java.math.BigDecimal::class -> return@getOrPut BigDecimalAdapter
-                java.time.LocalDate::class -> return@getOrPut LocalDateAdapter
-                java.time.LocalTime::class -> return@getOrPut LocalTimeAdapter
-                java.time.LocalDateTime::class -> return@getOrPut LocalDateTimeAdapter
+                UUID::class -> return@getOrPut UUIDAdapter
+                BigInteger::class -> return@getOrPut BigIntegerAdapter
+                BigDecimal::class -> return@getOrPut BigDecimalAdapter
+                LocalDate::class -> return@getOrPut LocalDateAdapter
+                LocalTime::class -> return@getOrPut LocalTimeAdapter
+                LocalDateTime::class -> return@getOrPut LocalDateTimeAdapter
+                Date::class -> return@getOrPut DateAdapter
+                ByteBuffer::class -> return@getOrPut ByteBufferAdapter
+
+                else -> { /* continue to next checks */ }
             }
 
             // 3. Enum

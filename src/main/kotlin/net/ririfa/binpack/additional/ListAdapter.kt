@@ -1,6 +1,6 @@
 package net.ririfa.binpack.additional
 
-import net.ririfa.binpack.AdapterSettings
+import net.ririfa.binpack.AdapterSetting
 import net.ririfa.binpack.TypeAdapter
 import java.nio.ByteBuffer
 
@@ -18,8 +18,8 @@ class ListAdapter<T>(
 
     override fun read(buffer: ByteBuffer): List<T> {
         val size = buffer.int
-        require(size in 0..AdapterSettings.maxCollectionSize) {
-            "Collection size $size exceeds configured limit (${AdapterSettings.maxCollectionSize})"
+        require(size in 0..AdapterSetting.maxCollectionSize) {
+            "Collection size $size exceeds configured limit (${AdapterSetting.maxCollectionSize})"
         }
         return List(size) { elementAdapter.read(buffer) }
     }
