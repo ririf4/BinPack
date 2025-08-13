@@ -7,7 +7,7 @@ class NullableAdapter<T : Any>(
     private val inner: TypeAdapter<T>
 ) : TypeAdapter<T?> {
     override fun estimateSize(value: T?): Int {
-        return 1 + (value?.let { inner.estimateSize(it) } ?: 0)
+        return if (value == null) 1 else 1 + inner.estimateSize(value)
     }
 
     override fun write(value: T?, buffer: ByteBuffer) {
@@ -20,7 +20,6 @@ class NullableAdapter<T : Any>(
     }
 
     override fun read(buffer: ByteBuffer): T? {
-        val isNotNull = buffer.get().toInt() != 0
-        return if (isNotNull) inner.read(buffer) else null
+        return if ((buffer.get().toInt() and 1) != 0) inner.read(buffer) else null
     }
 }

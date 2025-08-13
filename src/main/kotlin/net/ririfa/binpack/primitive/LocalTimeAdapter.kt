@@ -5,7 +5,7 @@ import java.nio.ByteBuffer
 import java.time.LocalTime
 
 object LocalTimeAdapter : TypeAdapter<LocalTime> {
-    override fun estimateSize(value: LocalTime) = Long.SIZE_BYTES // Store as nano of day
+    override fun estimateSize(value: LocalTime) = 8 // Store as nano of day
     override fun write(value: LocalTime, buffer: ByteBuffer) {
         buffer.putLong(value.toNanoOfDay())
     }

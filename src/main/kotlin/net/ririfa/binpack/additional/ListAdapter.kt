@@ -8,12 +8,15 @@ class ListAdapter<T>(
     private val elementAdapter: TypeAdapter<T>
 ) : TypeAdapter<List<T>> {
 
-    override fun estimateSize(value: List<T>): Int =
-        Int.SIZE_BYTES + value.sumOf { elementAdapter.estimateSize(it) }
+    override fun estimateSize(value: List<T>): Int {
+        var total = 4
+        for (e in value) total += elementAdapter.estimateSize(e)
+        return total
+    }
 
     override fun write(value: List<T>, buffer: ByteBuffer) {
         buffer.putInt(value.size)
-        value.forEach { elementAdapter.write(it, buffer) }
+        for (e in value) elementAdapter.write(e, buffer)
     }
 
     override fun read(buffer: ByteBuffer): List<T> {
@@ -21,6 +24,8 @@ class ListAdapter<T>(
         require(size in 0..AdapterSetting.maxCollectionSize) {
             "Collection size $size exceeds configured limit (${AdapterSetting.maxCollectionSize})"
         }
-        return List(size) { elementAdapter.read(buffer) }
+        val list = ArrayList<T>(size)
+        repeat(size) { list.add(elementAdapter.read(buffer)) }
+        return list
     }
 }

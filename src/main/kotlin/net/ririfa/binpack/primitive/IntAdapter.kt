@@ -4,7 +4,7 @@ import net.ririfa.binpack.TypeAdapter
 import java.nio.ByteBuffer
 
 object IntAdapter : TypeAdapter<Int> {
-    override fun estimateSize(value: Int) = Int.SIZE_BYTES
+    override fun estimateSize(value: Int) = 4
     override fun write(value: Int, buffer: ByteBuffer) {
         buffer.putInt(value)
     }

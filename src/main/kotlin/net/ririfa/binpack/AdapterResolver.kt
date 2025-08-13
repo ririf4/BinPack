@@ -1,6 +1,7 @@
 package net.ririfa.binpack
 
 import net.ririfa.binpack.additional.EnumAdapter
+import net.ririfa.binpack.additional.EnumWidth
 import net.ririfa.binpack.additional.ListAdapter
 import net.ririfa.binpack.additional.MapAdapter
 import net.ririfa.binpack.additional.NullableAdapter
@@ -61,7 +62,7 @@ object AdapterResolver {
                 Float::class   -> return@getOrPut FloatAdapter
                 Double::class  -> return@getOrPut DoubleAdapter
                 Char::class    -> return@getOrPut CharAdapter
-                String::class  -> return@getOrPut StringAdapter
+                String::class -> return@getOrPut StringAdapter(validate = false)
                 ByteArray::class -> return@getOrPut ByteArrayAdapter
 
                 UUID::class -> return@getOrPut UUIDAdapter
@@ -79,8 +80,18 @@ object AdapterResolver {
             // 3. Enum
             if (cls.java.isEnum) {
                 @Suppress("UNCHECKED_CAST")
-                return@getOrPut EnumAdapter(cls as KClass<Enum<*>>)
+                val enumClass = cls.java as Class<out Enum<*>>
+                val values = enumClass.enumConstants
+                    ?: error("Enum ${cls.qualifiedName} has no constants")
+
+                @Suppress("UNCHECKED_CAST")
+                return@getOrPut EnumAdapter(
+                    values as Array<Enum<*>>,
+                    EnumWidth.AUTO,
+                    validate = false
+                ) as TypeAdapter<Any>
             }
+
 
             // 4. List<T>
             if (cls == List::class) {

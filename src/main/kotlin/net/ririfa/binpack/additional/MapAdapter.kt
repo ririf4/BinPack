@@ -9,14 +9,20 @@ class MapAdapter<K, V>(
     private val valueAdapter: TypeAdapter<V>
 ) : TypeAdapter<Map<K, V>> {
 
-    override fun estimateSize(value: Map<K, V>): Int =
-        Int.SIZE_BYTES + value.entries.sumOf { keyAdapter.estimateSize(it.key) + valueAdapter.estimateSize(it.value) }
+    override fun estimateSize(value: Map<K, V>): Int {
+        var total = 4
+        for ((k, v) in value) {
+            total += keyAdapter.estimateSize(k)
+            total += valueAdapter.estimateSize(v)
+        }
+        return total
+    }
 
     override fun write(value: Map<K, V>, buffer: ByteBuffer) {
         buffer.putInt(value.size)
-        value.forEach {
-            keyAdapter.write(it.key, buffer)
-            valueAdapter.write(it.value, buffer)
+        for ((k, v) in value) {
+            keyAdapter.write(k, buffer)
+            valueAdapter.write(v, buffer)
         }
     }
 
@@ -25,8 +31,12 @@ class MapAdapter<K, V>(
         require(size in 0..AdapterSetting.maxCollectionSize) {
             "Collection size $size exceeds configured limit (${AdapterSetting.maxCollectionSize})"
         }
-        return (0 until size).associate {
-            keyAdapter.read(buffer) to valueAdapter.read(buffer)
+        val map = LinkedHashMap<K, V>(size)
+        repeat(size) {
+            val k = keyAdapter.read(buffer)
+            val v = valueAdapter.read(buffer)
+            map[k] = v
         }
+        return map
     }
 }

@@ -5,7 +5,7 @@ import java.nio.ByteBuffer
 import java.util.Date
 
 object DateAdapter : TypeAdapter<Date> {
-    override fun estimateSize(value: Date) = Long.SIZE_BYTES // Store as epoch milliseconds
+    override fun estimateSize(value: Date) = 8 // Size of a long in bytes
     override fun write(value: Date, buffer: ByteBuffer) {
         buffer.putLong(value.time)
     }

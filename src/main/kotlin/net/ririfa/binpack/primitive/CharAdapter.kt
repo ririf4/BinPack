@@ -4,7 +4,7 @@ import net.ririfa.binpack.TypeAdapter
 import java.nio.ByteBuffer
 
 object CharAdapter : TypeAdapter<Char> {
-    override fun estimateSize(value: Char) = Char.SIZE_BYTES
+    override fun estimateSize(value: Char) = 2 // Char is 2 bytes in UTF-16 encoding
     override fun write(value: Char, buffer: ByteBuffer) {
         buffer.putChar(value)
     }
