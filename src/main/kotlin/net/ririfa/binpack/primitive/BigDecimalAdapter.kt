@@ -1,42 +1,65 @@
 package net.ririfa.binpack.primitive
 
+import net.ririfa.binpack.ByteBufferL
 import net.ririfa.binpack.TypeAdapter
 import java.math.BigDecimal
 import java.math.BigInteger
-import java.nio.ByteBuffer
 import kotlin.math.max
 
 /**
- * Ultra-fast BigDecimal adapter (fixed-length headers, no compression)
- * Layout:
- *   [int magLen] [mag bytes (abs(unscaled), big-endian)] [byte sign (-1,0,1)] [int scale]
+ * Ultra-fast BigDecimal adapter (LE-safe, no raw ByteBuffer access)
+ *
+ * Binary layout:
+ *   [int magLen] [mag bytes (abs(unscaled), big-endian)] [u8 sign (255:-1, 0:0, 1:1)] [int scale]
  */
 object BigDecimalAdapter : TypeAdapter<BigDecimal> {
 
     override fun estimateSize(value: BigDecimal): Int {
         val unscaled = value.unscaledValue()
         val magLen = max(1, (unscaled.abs().bitLength() + 7) ushr 3)
+        // 4 (magLen) + magLen + 1 (sign) + 4 (scale)
         return 4 + magLen + 1 + 4
     }
 
-    override fun write(value: BigDecimal, buffer: ByteBuffer) {
+    override fun write(value: BigDecimal, buffer: ByteBufferL) {
         val unscaled = value.unscaledValue()
-        val sign = unscaled.signum()
+        val sign = unscaled.signum()              // -1, 0, 1
         val mag = unscaled.abs().toByteArray()
+        // Canonical zero as empty magnitude
         val magnitude = if (mag.size == 1 && mag[0].toInt() == 0) ByteArray(0) else mag
 
-        buffer.putInt(magnitude.size)
-        buffer.put(magnitude)
-        buffer.put(sign.toByte())
-        buffer.putInt(value.scale())
+        // [int magLen]
+        buffer.i32 = magnitude.size
+        // [mag bytes]
+        if (magnitude.isNotEmpty()) {
+            buffer.putBytes(magnitude)
+        }
+        // [u8 sign] (-1 -> 255)
+        buffer.i8 = if (sign == -1) 0xFF else sign and 0xFF
+        // [int scale]
+        buffer.i32 = value.scale()
     }
 
-    override fun read(buffer: ByteBuffer): BigDecimal {
-        val magLen = buffer.int
+    override fun read(buffer: ByteBufferL): BigDecimal {
+        // [int magLen]
+        val magLen = buffer.i32
+        // [mag bytes]
         val magnitude = ByteArray(magLen)
-        if (magLen > 0) buffer.get(magnitude)
-        val sign = buffer.get().toInt().coerceIn(-1, 1)
-        val scale = buffer.int
+        var i = 0
+        while (i < magLen) {
+            magnitude[i] = buffer.i8.toByte()
+            i++
+        }
+        // [u8 sign] (255 -> -1)
+        val signU8 = buffer.i8
+        val sign = when (signU8) {
+            0 -> 0
+            1 -> 1
+            0xFF -> -1
+            else -> if (signU8 >= 0x80) -1 else 1 // defensive fallback
+        }
+        // [int scale]
+        val scale = buffer.i32
 
         val unscaled = if (magLen == 0) BigInteger.ZERO else BigInteger(sign, magnitude)
         return BigDecimal(unscaled, scale)

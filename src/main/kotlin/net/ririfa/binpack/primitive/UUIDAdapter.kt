@@ -1,19 +1,20 @@
 package net.ririfa.binpack.primitive
 
+import net.ririfa.binpack.ByteBufferL
 import net.ririfa.binpack.TypeAdapter
-import java.nio.ByteBuffer
-import java.util.UUID
+import java.util.*
 
 object UUIDAdapter : TypeAdapter<UUID> {
-    override fun estimateSize(value: UUID) = 16 // 2 * Long.SIZE_BYTES
-    override fun write(value: UUID, buffer: ByteBuffer) {
-        buffer.putLong(value.mostSignificantBits)
-        buffer.putLong(value.leastSignificantBits)
+    override fun estimateSize(value: UUID) = 16
+
+    override fun write(value: UUID, buffer: ByteBufferL) {
+        buffer.i64 = value.mostSignificantBits
+        buffer.i64 = value.leastSignificantBits
     }
 
-    override fun read(buffer: ByteBuffer): UUID {
-        val mostSigBits = buffer.long
-        val leastSigBits = buffer.long
-        return UUID(mostSigBits, leastSigBits)
+    override fun read(buffer: ByteBufferL): UUID {
+        val msb = buffer.i64
+        val lsb = buffer.i64
+        return UUID(msb, lsb)
     }
 }

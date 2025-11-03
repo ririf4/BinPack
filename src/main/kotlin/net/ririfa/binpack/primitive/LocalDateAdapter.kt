@@ -1,16 +1,16 @@
 package net.ririfa.binpack.primitive
 
+import net.ririfa.binpack.ByteBufferL
 import net.ririfa.binpack.TypeAdapter
-import java.nio.ByteBuffer
 import java.time.LocalDate
 
 object LocalDateAdapter : TypeAdapter<LocalDate> {
-    override fun estimateSize(value: LocalDate) = 8 // Size of a long in bytes (to store epoch days)
-    override fun write(value: LocalDate, buffer: ByteBuffer) {
-        buffer.putLong(value.toEpochDay())
+    override fun estimateSize(value: LocalDate) = 8
+
+    override fun write(value: LocalDate, buffer: ByteBufferL) {
+        buffer.i64 = value.toEpochDay()
     }
 
-    override fun read(buffer: ByteBuffer): LocalDate {
-        return LocalDate.ofEpochDay(buffer.long)
-    }
+    override fun read(buffer: ByteBufferL): LocalDate =
+        LocalDate.ofEpochDay(buffer.i64)
 }

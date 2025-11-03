@@ -1,13 +1,9 @@
 package net.ririfa.binpack
 
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
-
 /**
- * TypeAdapter<T>
+ * TypeAdapter<T> (ByteBufferL-only)
  *
  * Contract:
- * - ByteOrder: LITTLE_ENDIAN is assumed.
  * - write(value, buffer):
  *     - Must advance buffer.position() by the number of bytes written.
  *     - Must respect buffer.limit(); throw BufferOverflowException if not enough space.
@@ -23,37 +19,35 @@ interface TypeAdapter<T> {
     fun estimateSize(value: T): Int
 
     /** Serialize value into buffer (advance position; respect limit). */
-    fun write(value: T, buffer: ByteBuffer)
+    fun write(value: T, buffer: ByteBufferL)
 
     /** Deserialize value from buffer (advance position; respect limit). */
-    fun read(buffer: ByteBuffer): T
+    fun read(buffer: ByteBufferL): T
 
     /**
      * Deep copy via encode→decode round-trip.
-     * - Uses BinPackBufferPool.get/release.
-     * - Retries with doubled capacity if estimateSize() underestimates.
-     * - Enforces LITTLE_ENDIAN.
-     * - Optionally verifies full consumption (no trailing bytes) to catch adapter bugs.
+     * Internally uses ByteBufferL-based pooling only.
      */
     fun copy(value: T): T {
         var cap = estimateSize(value).coerceAtLeast(MIN_CAP)
         while (true) {
             val buf = BinPackBufferPool.get(cap)
             try {
-                buf.clear().order(ByteOrder.LITTLE_ENDIAN)
+                buf.clear()
                 write(value, buf)
-                buf.flip().order(ByteOrder.LITTLE_ENDIAN)
-                val out = read(buf)
-                // Detect trailing bytes from mismatched write/read (useful during development).
-                if (buf.hasRemaining()) {
-                    throw BinPackFormatException(
-                        "Copy left ${buf.remaining()} trailing bytes (cap=$cap)"
-                    )
+                // Prepare a read view: use a read-only duplicate with same limits/positions if needed.
+                val ro = buf.asReadOnlyDuplicate().apply {
+                    // position/limit already reflect written bytes due to relative puts
+                    position = 0
+                    limit = buf.position
+                }
+                val out = read(ro)
+                if (ro.remaining != 0) {
+                    throw BinPackFormatException("Copy left ${ro.remaining} trailing bytes (cap=$cap)")
                 }
                 BinPackBufferPool.release(buf)
                 return out
             } catch (e: java.nio.BufferOverflowException) {
-                // Underestimation: release and retry with doubled capacity.
                 BinPackBufferPool.release(buf)
                 cap = nextCapacity(cap)
                 continue

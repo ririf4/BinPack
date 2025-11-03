@@ -1,4 +1,3 @@
-import org.gradle.kotlin.dsl.withType
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
@@ -12,7 +11,7 @@ plugins {
 }
 
 group = "net.ririfa"
-version = "0.2.0"
+version = "0.3.7+dev.2"
 
 repositories {
     mavenCentral()

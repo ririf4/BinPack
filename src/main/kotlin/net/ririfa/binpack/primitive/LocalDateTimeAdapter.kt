@@ -1,20 +1,21 @@
 package net.ririfa.binpack.primitive
 
+import net.ririfa.binpack.ByteBufferL
 import net.ririfa.binpack.TypeAdapter
-import java.nio.ByteBuffer
 import java.time.LocalDateTime
 import java.time.ZoneOffset
 
 object LocalDateTimeAdapter : TypeAdapter<LocalDateTime> {
-    override fun estimateSize(value: LocalDateTime) = 12 // Store as epoch seconds and nano
-    override fun write(value: LocalDateTime, buffer: ByteBuffer) {
-        buffer.putLong(value.toEpochSecond(ZoneOffset.UTC))
-        buffer.putInt(value.nano)
+    override fun estimateSize(value: LocalDateTime) = 12
+
+    override fun write(value: LocalDateTime, buffer: ByteBufferL) {
+        buffer.i64 = value.toEpochSecond(ZoneOffset.UTC)
+        buffer.i32 = value.nano
     }
 
-    override fun read(buffer: ByteBuffer): LocalDateTime {
-        val epochSeconds = buffer.long
-        val nano = buffer.int
+    override fun read(buffer: ByteBufferL): LocalDateTime {
+        val epochSeconds = buffer.i64
+        val nano = buffer.i32
         return LocalDateTime.ofEpochSecond(epochSeconds, nano, ZoneOffset.UTC)
     }
 }

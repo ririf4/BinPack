@@ -1,34 +1,37 @@
 package net.ririfa.binpack
 
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 import java.util.concurrent.ConcurrentLinkedDeque
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.max
 import kotlin.math.min
 
+/**
+ * BinPackBufferPool
+ *
+ * A simple multi-bucket pool for power-of-two-sized buffers backed by ByteBufferL.
+ * Public API exclusively exposes ByteBufferL to eliminate ByteBuffer usage.
+ */
 object BinPackBufferPool {
 
     // ---- tunables ----
-    private const val MIN_CAP = 32                      // Minimum capacity of a buffer in bytes
-    private const val MAX_CAP = 8 * 1024 * 1024         // Never allocate buffers larger than this (8 MiB)
-    private const val MAX_PER_BUCKET = 64               // Maximum amount of each bucket (For GC inhibition)
-    private const val ENFORCE_LITTLE_ENDIAN = true      // Set the Endian when returning buffers
+    private const val MIN_CAP = 32
+    private const val MAX_CAP = 8 * 1024 * 1024
+    private const val MAX_PER_BUCKET = 64
 
     private val MIN_POW = pow2CeilPow(MIN_CAP)
     private val MAX_POW = pow2CeilPow(MAX_CAP)
     private val BUCKETS = (MIN_POW..MAX_POW).count()
 
-    private val queues: Array<ConcurrentLinkedDeque<ByteBuffer>> =
-        Array(BUCKETS) { ConcurrentLinkedDeque<ByteBuffer>() }
+    private val queues: Array<ConcurrentLinkedDeque<ByteBufferL>> =
+        Array(BUCKETS) { ConcurrentLinkedDeque<ByteBufferL>() }
     private val counts: Array<AtomicInteger> =
         Array(BUCKETS) { AtomicInteger(0) }
 
     /**
-     * Get a reusable [ByteBuffer] of at least the specified [size].
-     * The returned buffer will be cleared and set to little-endian order if [ENFORCE_LITTLE_ENDIAN] is true.
+     * Get a reusable [ByteBufferL] of at least the specified [size].
+     * The returned buffer is cleared.
      */
-    fun get(size: Int): ByteBuffer {
+    fun get(size: Int): ByteBufferL {
         require(size >= 0) { "size must be >= 0: $size" }
         val cap = clampToClass(roundUpToPow2(max(size, MIN_CAP)))
         val idx = capToIndex(cap)
@@ -38,22 +41,18 @@ object BinPackBufferPool {
         if (buf != null) {
             counts[idx].decrementAndGet()
             buf.clear()
-            if (ENFORCE_LITTLE_ENDIAN) buf.order(ByteOrder.LITTLE_ENDIAN)
             return buf
         }
 
-        val allocated = ByteBuffer.allocateDirect(cap)
-        if (ENFORCE_LITTLE_ENDIAN) allocated.order(ByteOrder.LITTLE_ENDIAN)
-        return allocated
+        // Allocate a new LE buffer via ByteBufferL factory.
+        return ByteBufferL.allocate(capacity = cap, direct = true)
     }
 
     /**
-     * Release a [ByteBuffer] back to the pool.
-     * The buffer must have a capacity that is a power of two and within the defined limits.
-     * If the buffer is too large or not a power of two, it will be ignored.
+     * Release a [ByteBufferL] back to the pool.
      */
-    fun release(buffer: ByteBuffer) {
-        val cap = buffer.capacity()
+    fun release(buffer: ByteBufferL) {
+        val cap = buffer.capacity
         if (!isPow2(cap) || cap < MIN_CAP || cap > MAX_CAP) {
             return
         }
@@ -62,7 +61,6 @@ object BinPackBufferPool {
         if (cnt.get() >= MAX_PER_BUCKET) return
 
         buffer.clear()
-        if (ENFORCE_LITTLE_ENDIAN) buffer.order(ByteOrder.LITTLE_ENDIAN)
         queues[idx].addFirst(buffer)
         cnt.incrementAndGet()
     }
@@ -93,7 +91,6 @@ object BinPackBufferPool {
     }
 
     private fun capToIndex(cap: Int): Int {
-        // cap = 2^(MIN_POW + idx)
         val pow = pow2CeilPow(cap)
         return pow - MIN_POW
     }

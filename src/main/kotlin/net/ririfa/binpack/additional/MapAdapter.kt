@@ -1,16 +1,20 @@
 package net.ririfa.binpack.additional
 
 import net.ririfa.binpack.AdapterSetting
+import net.ririfa.binpack.ByteBufferL
 import net.ririfa.binpack.TypeAdapter
-import java.nio.ByteBuffer
 
+/**
+ * Adapter for Map<K,V> with prefixed size.
+ * Encoding: [i32 size][(key,value)...]
+ */
 class MapAdapter<K, V>(
     private val keyAdapter: TypeAdapter<K>,
     private val valueAdapter: TypeAdapter<V>
 ) : TypeAdapter<Map<K, V>> {
 
     override fun estimateSize(value: Map<K, V>): Int {
-        var total = 4
+        var total = 4 // size header
         for ((k, v) in value) {
             total += keyAdapter.estimateSize(k)
             total += valueAdapter.estimateSize(v)
@@ -18,16 +22,16 @@ class MapAdapter<K, V>(
         return total
     }
 
-    override fun write(value: Map<K, V>, buffer: ByteBuffer) {
-        buffer.putInt(value.size)
+    override fun write(value: Map<K, V>, buffer: ByteBufferL) {
+        buffer.i32 = value.size
         for ((k, v) in value) {
             keyAdapter.write(k, buffer)
             valueAdapter.write(v, buffer)
         }
     }
 
-    override fun read(buffer: ByteBuffer): Map<K, V> {
-        val size = buffer.int
+    override fun read(buffer: ByteBufferL): Map<K, V> {
+        val size = buffer.i32
         require(size in 0..AdapterSetting.maxCollectionSize) {
             "Collection size $size exceeds configured limit (${AdapterSetting.maxCollectionSize})"
         }

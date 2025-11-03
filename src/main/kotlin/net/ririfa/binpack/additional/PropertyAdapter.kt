@@ -1,31 +1,60 @@
 package net.ririfa.binpack.additional
 
+import net.ririfa.binpack.ByteBufferL
 import net.ririfa.binpack.TypeAdapter
 import java.lang.invoke.MethodHandle
 import java.lang.invoke.MethodHandles
-import java.lang.invoke.MethodType
-import java.nio.ByteBuffer
+import java.lang.reflect.Modifier
 import kotlin.reflect.KParameter
 import kotlin.reflect.KProperty1
+import kotlin.reflect.jvm.isAccessible
 import kotlin.reflect.jvm.javaField
+import kotlin.reflect.jvm.javaGetter
 
-class PropertyAdapter<T : Any, V>(
-    property: KProperty1<T, V>,
+class PropertyAdapter<E : Any, V>(
+    private val prop: KProperty1<E, V>,
     val param: KParameter,
-    val adapter: TypeAdapter<V>
+    private val inner: TypeAdapter<V>
 ) {
-    private val getter: MethodHandle = MethodHandles.lookup()
-        .unreflectGetter(property.javaField!!)
-        .asType(MethodType.methodType(Any::class.java, Any::class.java))
+    private val getterFn: (E) -> V = run {
+        prop.javaGetter?.let { jg ->
+            val owner = jg.declaringClass
+            val lookup =
+                if (Modifier.isPublic(jg.modifiers) && Modifier.isPublic(owner.modifiers))
+                    MethodHandles.publicLookup()
+                else
+                    MethodHandles.privateLookupIn(owner, MethodHandles.lookup())
 
-    @Suppress("UNCHECKED_CAST")
-    private fun get(instance: T): V = getter.invoke(instance) as V
+            try {
+                val mh: MethodHandle = lookup.unreflect(jg)
+                @Suppress("UNCHECKED_CAST")
+                return@run { recv -> mh.invoke(recv) as V }
+            } catch (_: IllegalAccessException) {
+            }
+        }
 
-    fun estimateSize(instance: T): Int = adapter.estimateSize(get(instance))
+        prop.javaField?.let { f ->
+            try {
+                f.isAccessible = true
+                @Suppress("UNCHECKED_CAST")
+                return@run { recv -> f.get(recv) as V }
+            } catch (_: Throwable) {
+            }
+        }
 
-    fun write(instance: T, buffer: ByteBuffer) {
-        adapter.write(get(instance), buffer)
+        prop.isAccessible = true
+        return@run { recv -> prop.get(recv) }
     }
 
-    fun read(buffer: ByteBuffer): V = adapter.read(buffer)
+    fun estimateSize(instance: E): Int {
+        val v = getterFn(instance)
+        return inner.estimateSize(v)
+    }
+
+    fun write(instance: E, buffer: ByteBufferL) {
+        val v = getterFn(instance)
+        inner.write(v, buffer)
+    }
+
+    fun read(buffer: ByteBufferL): V = inner.read(buffer)
 }

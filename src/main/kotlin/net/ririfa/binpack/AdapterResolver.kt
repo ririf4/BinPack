@@ -1,42 +1,31 @@
 package net.ririfa.binpack
 
-import net.ririfa.binpack.additional.EnumAdapter
-import net.ririfa.binpack.additional.EnumWidth
-import net.ririfa.binpack.additional.ListAdapter
-import net.ririfa.binpack.additional.MapAdapter
-import net.ririfa.binpack.additional.NullableAdapter
-import net.ririfa.binpack.additional.PropertyAdapter
-import net.ririfa.binpack.primitive.BigDecimalAdapter
-import net.ririfa.binpack.primitive.BigIntegerAdapter
-import net.ririfa.binpack.primitive.BooleanAdapter
-import net.ririfa.binpack.primitive.ByteAdapter
-import net.ririfa.binpack.primitive.ByteArrayAdapter
-import net.ririfa.binpack.primitive.ByteBufferAdapter
-import net.ririfa.binpack.primitive.CharAdapter
-import net.ririfa.binpack.primitive.DateAdapter
-import net.ririfa.binpack.primitive.DoubleAdapter
-import net.ririfa.binpack.primitive.FloatAdapter
-import net.ririfa.binpack.primitive.IntAdapter
-import net.ririfa.binpack.primitive.LocalDateAdapter
-import net.ririfa.binpack.primitive.LocalDateTimeAdapter
-import net.ririfa.binpack.primitive.LocalTimeAdapter
-import net.ririfa.binpack.primitive.LongAdapter
-import net.ririfa.binpack.primitive.ShortAdapter
-import net.ririfa.binpack.primitive.StringAdapter
-import net.ririfa.binpack.primitive.UUIDAdapter
+import net.ririfa.binpack.additional.*
+import net.ririfa.binpack.primitive.*
 import java.math.BigDecimal
 import java.math.BigInteger
-import java.nio.ByteBuffer
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
-import java.util.Date
-import java.util.UUID
+import java.util.*
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.reflect.KClass
 import kotlin.reflect.KType
-import kotlin.reflect.full.*
-import java.util.concurrent.ConcurrentHashMap
+import kotlin.reflect.full.createType
+import kotlin.reflect.full.memberProperties
+import kotlin.reflect.full.primaryConstructor
+import kotlin.reflect.full.withNullability
 
+/**
+ * AdapterResolver (ByteBufferL-only)
+ *
+ * Resolves a TypeAdapter for a given KType. Public interface remains unchanged
+ * but all adapters are expected to operate on ByteBufferL.
+ *
+ * NOTE:
+ * - Primitive and additional adapters must be ByteBufferL-based implementations.
+ * - ByteBuffer-based adapters are not supported anymore.
+ */
 object AdapterResolver {
     private val adapterCache = ConcurrentHashMap<KType, TypeAdapter<*>>()
 
@@ -45,14 +34,16 @@ object AdapterResolver {
             val cls = type.classifier as? KClass<*>
                 ?: error("Unsupported type: $type")
 
-            // 1. Nullable
+            // 1. Nullable<T?>
             if (type.isMarkedNullable) {
                 val nonNullType = type.withNullability(false)
+
+                @Suppress("UNCHECKED_CAST")
                 val inner = getAdapterForType(nonNullType) as TypeAdapter<Any>
                 return@getOrPut NullableAdapter(inner)
             }
 
-            // 2. Primitive / Built-in
+            // 2. Primitive / Built-in (these must be L-based in your codebase)
             when (cls) {
                 Int::class     -> return@getOrPut IntAdapter
                 Long::class    -> return@getOrPut LongAdapter
@@ -62,7 +53,7 @@ object AdapterResolver {
                 Float::class   -> return@getOrPut FloatAdapter
                 Double::class  -> return@getOrPut DoubleAdapter
                 Char::class    -> return@getOrPut CharAdapter
-                String::class -> return@getOrPut StringAdapter(validate = false)
+                String::class -> return@getOrPut StringAdapter()
                 ByteArray::class -> return@getOrPut ByteArrayAdapter
 
                 UUID::class -> return@getOrPut UUIDAdapter
@@ -72,7 +63,6 @@ object AdapterResolver {
                 LocalTime::class -> return@getOrPut LocalTimeAdapter
                 LocalDateTime::class -> return@getOrPut LocalDateTimeAdapter
                 Date::class -> return@getOrPut DateAdapter
-                ByteBuffer::class -> return@getOrPut ByteBufferAdapter
 
                 else -> { /* continue to next checks */ }
             }
@@ -91,7 +81,6 @@ object AdapterResolver {
                     validate = false
                 ) as TypeAdapter<Any>
             }
-
 
             // 4. List<T>
             if (cls == List::class) {
@@ -114,8 +103,8 @@ object AdapterResolver {
                 )
             }
 
-            // 6. data class
-            if (cls.isData) {
+            // 6. data class / record class (generate composite adapter on the fly)
+            if (cls.isData || cls.java.isRecord) {
                 @Suppress("UNCHECKED_CAST")
                 return@getOrPut generateCompositeAdapter(cls as KClass<Any>)
             }
@@ -129,30 +118,48 @@ object AdapterResolver {
         return getAdapterForType(kClass.createType()) as TypeAdapter<T>
     }
 
+    /**
+     * Reflection-based composite adapter for Kotlin data classes and Java records.
+     * Uses ByteBufferL-only adapters for fields.
+     */
     fun <T : Any> generateCompositeAdapter(kClass: KClass<T>): TypeAdapter<T> {
         val constructor = kClass.primaryConstructor
             ?: error("Class ${kClass.simpleName} has no primary constructor")
 
-        val propertyAdapters = constructor.parameters.mapIndexed { index, param ->
-            val prop = kClass.memberProperties.find { it.name == param.name }
+        // Map constructor params to matching properties and adapters
+        data class Field(val name: String, val getter: (Any) -> Any?, val adapter: TypeAdapter<Any?>, val param: kotlin.reflect.KParameter)
+
+        val propsByName = kClass.memberProperties.associateBy { it.name }
+        val fields = constructor.parameters.map { param ->
+            val prop = propsByName[param.name]
                 ?: error("No matching property for constructor parameter '${param.name}'")
 
-            val adapter = getAdapterForType(param.type)
+            @Suppress("UNCHECKED_CAST")
+            val getter: (Any) -> Any? = { instance -> (prop as kotlin.reflect.KProperty1<Any, Any?>).get(instance) }
 
-            PropertyAdapter(prop, param, adapter as TypeAdapter<Any?>)
+            @Suppress("UNCHECKED_CAST")
+            val adapter = getAdapterForType(param.type) as TypeAdapter<Any?>
+            Field(param.name ?: "<unnamed>", getter, adapter, param)
         }
 
         return object : TypeAdapter<T> {
             override fun estimateSize(value: T): Int {
-                return propertyAdapters.sumOf { it.estimateSize(value) }
+                var sum = 0
+                for (f in fields) sum += f.adapter.estimateSize(f.getter(value))
+                return sum
             }
 
-            override fun write(value: T, buffer: ByteBuffer) {
-                propertyAdapters.forEach { it.write(value, buffer) }
+            override fun write(value: T, buffer: ByteBufferL) {
+                for (f in fields) {
+                    @Suppress("UNCHECKED_CAST")
+                    f.adapter.write(f.getter(value), buffer)
+                }
             }
 
-            override fun read(buffer: ByteBuffer): T {
-                val args = propertyAdapters.associate { it.param to it.read(buffer) }
+            override fun read(buffer: ByteBufferL): T {
+                val args = fields.associate { f ->
+                    f.param to f.adapter.read(buffer)
+                }
                 return constructor.callBy(args)
             }
         }

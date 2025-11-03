@@ -1,63 +1,74 @@
 package net.ririfa.binpack.primitive
 
+import net.ririfa.binpack.ByteBufferL
 import net.ririfa.binpack.TypeAdapter
-import java.nio.ByteBuffer
 
-
+/**
+ * ASCII/ISO-8859-1 string adapter.
+ *
+ * Encoding:
+ *   [i32 length][bytes(length)]
+ * Constraints:
+ *   - When validate=true, only 0x00..0x7F are allowed.
+ * Notes:
+ *   - Length is written first as a placeholder and patched after writing bytes
+ *     to avoid double-pass when computing byte length.
+ */
 class StringAdapter(private val validate: Boolean = true) : TypeAdapter<String> {
 
     override fun estimateSize(value: String): Int {
+        // ASCII/ISO-8859-1 => 1 byte per char
         return 4 + value.length
     }
 
-    override fun write(value: String, buffer: ByteBuffer) {
-        val start = buffer.position()
-        buffer.position(start + 4)
+    override fun write(value: String, buffer: ByteBufferL) {
+        val start = buffer.position
+        buffer.i32 = 0 // placeholder for length
 
+        var written = 0
         val len = value.length
         var i = 0
         while (i < len) {
             val c = value[i].code
-            if (validate && (c and 0x80 != 0)) {
+            if (validate && (c and 0x80) != 0) {
                 throw IllegalArgumentException(
                     "Non-ASCII char detected: U+%04X at index %d".format(c, i)
                 )
             }
-            buffer.put(c.toByte())
+            buffer.i8 = (c and 0xFF)
+            written++
             i++
         }
 
-        val byteLen = len
-        buffer.putInt(start, byteLen)
+        // Patch the length field
+        buffer.putI32At(start, written)
     }
 
-    override fun read(buffer: ByteBuffer): String {
-        val size = buffer.int
-        if (size == 0) return ""
+    override fun read(buffer: ByteBufferL): String {
+        val size = buffer.i32
+        require(size >= 0) { "Negative size: $size" }
+        require(buffer.remaining >= size) {
+            "Insufficient bytes: need=$size remaining=${buffer.remaining}"
+        }
 
-        val pos = buffer.position()
-        val limit = pos + size
-
+        val sb = StringBuilder(size)
+        var k = 0
         if (validate) {
-            var p = pos
-            while (p < limit) {
-                val b = buffer.get(p).toInt()
-                if (b and 0x80 != 0) {
-                    throw IllegalArgumentException(
-                        "Non-ASCII byte detected at offset ${p - pos}"
-                    )
+            while (k < size) {
+                val b = buffer.i8
+                if ((b and 0x80) != 0) {
+                    throw IllegalArgumentException("Non-ASCII byte at offset $k")
                 }
-                p++
+                sb.append((b and 0x7F).toChar())
+                k++
+            }
+        } else {
+            while (k < size) {
+                val b = buffer.i8
+                sb.append((b and 0xFF).toChar())
+                k++
             }
         }
-
-        val chars = CharArray(size)
-        var p = pos
-        var i = 0
-        while (p < limit) {
-            chars[i++] = (buffer.get(p++).toInt() and 0x7F).toChar()
-        }
-        buffer.position(limit)
-        return String(chars, 0, size)
+        return sb.toString()
     }
 }

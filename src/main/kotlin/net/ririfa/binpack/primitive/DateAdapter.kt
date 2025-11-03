@@ -1,16 +1,17 @@
 package net.ririfa.binpack.primitive
 
+import net.ririfa.binpack.ByteBufferL
 import net.ririfa.binpack.TypeAdapter
-import java.nio.ByteBuffer
-import java.util.Date
+import java.util.*
 
 object DateAdapter : TypeAdapter<Date> {
-    override fun estimateSize(value: Date) = 8 // Size of a long in bytes
-    override fun write(value: Date, buffer: ByteBuffer) {
-        buffer.putLong(value.time)
+    override fun estimateSize(value: Date) = 8
+
+    override fun write(value: Date, buffer: ByteBufferL) {
+        buffer.i64 = value.time
     }
 
-    override fun read(buffer: ByteBuffer): Date {
-        return Date(buffer.long)
+    override fun read(buffer: ByteBufferL): Date {
+        return Date(buffer.i64)
     }
 }

@@ -1,13 +1,23 @@
 package net.ririfa.binpack.primitive
 
+import net.ririfa.binpack.ByteBufferL
 import net.ririfa.binpack.TypeAdapter
-import java.nio.ByteBuffer
 
+/**
+ * UTF-16 code unit adapter (2 bytes).
+ * Stored as raw 16-bit little-endian value using ByteBufferL.i16.
+ * This preserves the exact 16-bit pattern of Kotlin Char.
+ */
 object CharAdapter : TypeAdapter<Char> {
-    override fun estimateSize(value: Char) = 2 // Char is 2 bytes in UTF-16 encoding
-    override fun write(value: Char, buffer: ByteBuffer) {
-        buffer.putChar(value)
+    override fun estimateSize(value: Char) = 2
+
+    override fun write(value: Char, buffer: ByteBufferL) {
+        // Write low 16 bits (UTF-16 code unit) in LE
+        buffer.i16 = value.code.toShort()
     }
 
-    override fun read(buffer: ByteBuffer) = buffer.char
+    override fun read(buffer: ByteBufferL): Char {
+        // Read signed short then widen to unsigned 16-bit range
+        return (buffer.i16.toInt() and 0xFFFF).toChar()
+    }
 }

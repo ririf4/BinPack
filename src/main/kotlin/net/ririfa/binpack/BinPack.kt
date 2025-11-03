@@ -2,28 +2,33 @@
 
 package net.ririfa.binpack
 
-import java.nio.BufferOverflowException
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 import kotlin.reflect.typeOf
 
+/**
+ * BinPack (ByteBufferL-only)
+ *
+ * Public and internal APIs operate exclusively on ByteBufferL.
+ * There is no ByteBuffer-based overload anymore.
+ */
 object BinPack {
 
-    /* ───────── Public API ───────── */
+    /* ───────── Public API (ByteBufferL only) ───────── */
 
-    inline fun <reified T : Any> encode(value: T): ByteBuffer {
+    /** Encode into a pooled buffer and return it (detached from pool ownership). */
+    inline fun <reified T : Any> encode(value: T): ByteBufferL {
         val adapter = adapter<T>()
         var cap = adapter.estimateSize(value).coerceAtLeast(MIN_CAP)
         while (true) {
             val pooled = borrowPooled(cap)
             try {
                 val buf = pooled.buffer
-                buf.clear().order(ByteOrder.LITTLE_ENDIAN)
+                buf.clear()
                 adapter.write(value, buf)
-                buf.flip()
+                // Flip is not a concept on ByteBufferL; callers are expected to use position/limit
+                // semantics from their adapters/consumers. If a "read-mode" is desired, duplicate().
                 pooled.detach()
                 return buf
-            } catch (_: BufferOverflowException) {
+            } catch (e: java.nio.BufferOverflowException) {
                 pooled.close()
                 cap = nextCapacity(cap)
             } catch (t: Throwable) {
@@ -33,70 +38,20 @@ object BinPack {
         }
     }
 
-    inline fun <reified T : Any> encodeInto(value: T, buffer: ByteBuffer) {
-        @Suppress("UNCHECKED_CAST")
+    /** Encode into a caller-provided ByteBufferL. */
+    inline fun <reified T : Any> encodeInto(value: T, buffer: ByteBufferL) {
         val adapter = adapter<T>()
-        buffer.order(ByteOrder.LITTLE_ENDIAN)
         adapter.write(value, buffer)
     }
 
-    inline fun <reified T : Any> encodeReadOnly(value: T): ByteBuffer =
-        encode<T>(value).duplicate().asReadOnlyBuffer()
-
-    @Deprecated(
-        message = "Prefer ByteBuffer to avoid extra copy.",
-        replaceWith = ReplaceWith("BinPack.encode<T>(value)"),
-        level = DeprecationLevel.WARNING
-    )
-    inline fun <reified T : Any> encodeToByteArray(value: T): ByteArray {
-        @Suppress("UNCHECKED_CAST")
+    /** Decode a value from the given ByteBufferL. */
+    inline fun <reified T : Any> decode(buffer: ByteBufferL): T {
         val adapter = adapter<T>()
-        var cap = adapter.estimateSize(value).coerceAtLeast(MIN_CAP)
-        while (true) {
-            val pooled = borrowPooled(cap)
-            try {
-                val buf = pooled.buffer
-                buf.clear().order(ByteOrder.LITTLE_ENDIAN)
-                adapter.write(value, buf)
-                buf.flip()
-                val out = ByteArray(buf.remaining())
-                buf.get(out)
-                pooled.close()
-                return out
-            } catch (_: BufferOverflowException) {
-                pooled.close()
-                cap = nextCapacity(cap)
-            } catch (t: Throwable) {
-                pooled.close()
-                throw t
-            }
-        }
-    }
-
-    inline fun <reified T : Any> decodeFromBuffer(buffer: ByteBuffer): T {
-        @Suppress("UNCHECKED_CAST")
-        val adapter = adapter<T>()
-        buffer.order(ByteOrder.LITTLE_ENDIAN)
         return adapter.read(buffer)
     }
 
-    inline fun <reified T : Any> decodeFromBytes(bytes: ByteArray): T {
-        @Suppress("UNCHECKED_CAST")
-        val adapter = adapter<T>()
-        val buf = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
-        return adapter.read(buf)
-    }
-
-    @JvmName("decodeFromBytesRange")
-    inline fun <reified T : Any> decodeFromBytes(bytes: ByteArray, offset: Int, length: Int): T {
-        require(offset >= 0 && length >= 0 && offset + length <= bytes.size) {
-            "Invalid range: offset=$offset, length=$length, size=${bytes.size}"
-        }
-        @Suppress("UNCHECKED_CAST")
-        val adapter = adapter<T>()
-        val buf = ByteBuffer.wrap(bytes, offset, length).order(ByteOrder.LITTLE_ENDIAN)
-        return adapter.read(buf)
-    }
+    /** Deep copy via encode→decode round-trip using ByteBufferL pooling. */
+    inline fun <reified T : Any> deepCopy(value: T): T = adapter<T>().copy(value)
 
     /* ───────── Internal helpers ───────── */
 
@@ -117,7 +72,7 @@ object BinPack {
         PooledBuffer(BinPackBufferPool.get(capacity))
 
     @PublishedApi
-    internal class PooledBuffer internal constructor(@PublishedApi internal val buffer: ByteBuffer) : AutoCloseable {
+    internal class PooledBuffer internal constructor(@PublishedApi internal val buffer: ByteBufferL) : AutoCloseable {
         private var detached = false
         fun detach() { detached = true }
         override fun close() {
