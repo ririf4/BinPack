@@ -110,8 +110,7 @@ class ByteBufferL private constructor(
 
     /** Intentionally unsafe: exposes raw ByteBuffer (LE invariants are not enforced). */
     @Deprecated("Exposes raw ByteBuffer; unsafe w.r.t. LE semantics. Use LE-safe methods instead.", ReplaceWith("this"))
-    val byte: ByteBuffer
-        get() = buf
+    fun rawDuplicate(): ByteBuffer = buf.duplicate()
 
     // ---------------- LE-safe views (public) ----------------
     /**
@@ -150,7 +149,6 @@ class ByteBufferL private constructor(
 
     // ---------------- Intentional raw exposure (internal) ----------------
     internal fun rawBuffer(): ByteBuffer = buf
-    internal fun rawDuplicate(): ByteBuffer = buf.duplicate()
     internal fun rawSlice(): ByteBuffer = buf.slice()
     internal fun rawSliceAt(at: Int, len: Int): ByteBuffer {
         val d = buf.duplicate()
@@ -295,7 +293,6 @@ class ByteBufferL private constructor(
             LE.cursor(buf).putU64(v)
         }
 
-
     var f32: Float
         get() = relGetFloat()
         set(v) = relPutFloat(v)
@@ -362,6 +359,7 @@ class ByteBufferL private constructor(
         }
         return this
     }
+
 
     /** Relative bulk write of Ints (aligned). */
     fun putInts(src: IntArray, off: Int = 0, len: Int = src.size - off): ByteBufferL {
@@ -439,7 +437,6 @@ class ByteBufferL private constructor(
         fun putInts(src: IntArray, off: Int = 0, len: Int = src.size - off): At {
             LE.putInts(buf, base, src, off, len); return this
         }
-
         fun putLongs(src: LongArray, off: Int = 0, len: Int = src.size - off): At {
             LE.putLongs(buf, base, src, off, len); return this
         }
@@ -492,7 +489,56 @@ class ByteBufferL private constructor(
     /** Write exactly [len] bytes from current position to [ch], advancing position. */
     fun writeFully(ch: WritableByteChannel, len: Int): Int =
         LE.writeFully(ch, buf, len)
-
     /** Read exactly [len] bytes into this buffer from [ch], advancing position. */
     fun readFully(ch: ReadableByteChannel, len: Int): Int = LE.readFully(ch, buf, len)
 }
+
+fun ByteBufferL.putAscii(s: String): ByteBufferL {
+    // We rely on the caller's isAsciiNoSep(), but still guard for robustness.
+    for (ch in s) {
+        val code = ch.code
+        require(code <= 0x7F) { "Non-ASCII char: U+%04X".format(code) }
+        this.i8 = code
+    }
+    return this
+}
+
+fun ByteBufferL.debugString(limit: Int = Int.MAX_VALUE / 4): String {
+    val sb = StringBuilder()
+    for (i in 0 until minOf(limit, remaining)) {
+        sb.append(String.format("%02X ", i8))
+    }
+    if (remaining > 0) sb.append("...")
+    return sb.toString()
+}
+
+fun ByteBufferL.toByteArray(): ByteArray {
+    val n = remaining
+    val dst = ByteArray(n)
+
+    val dup = buf.duplicate()
+    dup.limit(buf.limit()).position(buf.position())
+
+    dup.get(dst, 0, n)
+
+    return dst
+}
+
+
+val ByteBufferL.hex: String
+    get() {
+        val sb = StringBuilder(remaining * 2)
+        val bb = buf.duplicate().order(ByteOrder.LITTLE_ENDIAN)
+        val p0 = bb.position()
+        val p1 = bb.limit()
+        var p = p0
+        while (p < p1) {
+            val b = LE.getU8(bb, p)
+            sb.append(HEX[(b ushr 4) and 0xF])
+            sb.append(HEX[b and 0xF])
+            p++
+        }
+        return sb.toString()
+    }
+
+private val HEX = "0123456789ABCDEF".toCharArray()
