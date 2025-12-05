@@ -20,8 +20,8 @@
 
 package net.ririfa.binpack
 
-import dev.swiftstorm.akkaradb.common.types.U64
 import net.ririfa.binpack.types.U32
+import net.ririfa.binpack.types.U64
 import net.ririfa.binpack.vh.LE
 import net.ririfa.binpack.vh.LE.rangeCheck
 import java.nio.ByteBuffer

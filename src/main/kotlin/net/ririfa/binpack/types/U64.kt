@@ -18,7 +18,7 @@
  */
 @file:Suppress("NOTHING_TO_INLINE")
 
-package dev.swiftstorm.akkaradb.common.types
+package net.ririfa.binpack.types
 
 /** Unsigned 64-bit integer (zero-overhead, wraps Long). */
 @JvmInline

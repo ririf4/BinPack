@@ -15,6 +15,7 @@ import kotlin.reflect.full.createType
 import kotlin.reflect.full.memberProperties
 import kotlin.reflect.full.primaryConstructor
 import kotlin.reflect.full.withNullability
+import kotlin.reflect.jvm.isAccessible
 
 /**
  * AdapterResolver (ByteBufferL-only, v1.0.0)

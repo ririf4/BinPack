@@ -50,10 +50,19 @@ object AdapterSetting {
     var enableDetailedErrors: Boolean = true
 
     // Statistics counters (only updated when enableStatistics = true)
+    @PublishedApi
     internal val encodeCount = AtomicLong(0)
+
+    @PublishedApi
     internal val decodeCount = AtomicLong(0)
+
+    @PublishedApi
     internal val deepCopyCount = AtomicLong(0)
+
+    @PublishedApi
     internal val totalBytesEncoded = AtomicLong(0)
+
+    @PublishedApi
     internal val totalBytesDecoded = AtomicLong(0)
 
     /**
