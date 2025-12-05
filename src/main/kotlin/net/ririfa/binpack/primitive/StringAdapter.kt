@@ -46,7 +46,10 @@ class StringAdapter(private val validate: Boolean = true) : TypeAdapter<String> 
 
     override fun read(buffer: ByteBufferL): String {
         val size = buffer.i32
-        require(size >= 0) { "Negative size: $size" }
+        require(size >= 0) { "Negative string size: $size" }
+        require(size <= net.ririfa.binpack.AdapterSetting.maxStringLength) {
+            "String size $size exceeds configured limit (${net.ririfa.binpack.AdapterSetting.maxStringLength})"
+        }
         require(buffer.remaining >= size) {
             "Insufficient bytes: need=$size remaining=${buffer.remaining}"
         }

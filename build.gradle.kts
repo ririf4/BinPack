@@ -11,7 +11,7 @@ plugins {
 }
 
 group = "net.ririfa"
-version = "0.3.7"
+version = "1.0.0"
 
 repositories {
     mavenCentral()
